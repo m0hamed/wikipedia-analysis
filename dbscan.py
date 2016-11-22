@@ -60,45 +60,99 @@ def findHighCategoryRates(clusterCategoryRates,totalCategoryRate,db):
     #print stats
     print("\n\n\nCluster %d (%d) : %d categories"%(clusterNdx,clusterSizes[clusterNdx],len(clusterCategoryRates[clusterNdx])))
     
-    if clusterNdx > 0:#ignore default noise cluster
+    if clusterNdx >= 0:#ignore default noise cluster
       results = []
+      general = []
       for category in clusterCategoryRates[clusterNdx]: #iterate over five most common categories in cluster
         #TODO: maybe compare to find significantly larger ratios?
         #TODO: maybe filter out clusters with few articles?
         if clusterCategoryRates[clusterNdx][category] > totalCategoryRate[category]: #compare cluster ratio to total
           results.append((clusterCategoryRates[clusterNdx][category],totalCategoryRate[category],category))
-      #sort results, highest appearance ratio to lowest
-      results = sorted(results,key=lambda x:x[0],reverse=True)
+        general.append((clusterCategoryRates[clusterNdx][category],totalCategoryRate[category],category))
+
+      #sort all results, highest appearance ratio to lowest
+      general = sorted(general,key=lambda x:x[0],reverse=True)
       #print 5 highest ratios
+      print("Most prevalent categories:")
+      for result in general[:5]:
+        if result[0]>result[1]:
+          print("\t%.4f > %.4f: %s"%result)
+        else:
+          print("\t%.4f < %.4f: %s"%result)
+
+      #sort significant results, highest appearance ratio to lowest
+      results = sorted(results,key=lambda x:x[0],reverse=True)
+      #print 5 highest significant ratios
+      print("Significant results:")
       for result in results[:5]:
         print("\t%.4f > %.4f: %s"%result)
 
 
-def categoryAnalysis(count=100, nClusters=100, eps=100, samples=3):
+def categoryAnalysis(count=100, nClusters=100, startEps=100, targetNoise=0.5, samples=3):
   matrix = loadMatrixPickle(count,nClusters)
 
   ### standardise the matrix for distances to make sense 
   ### TODO: is this necessary or helpful? dbscan runs nicely on list of lists from featurehashedmatrix
-  mat = np.matrix(matrix.matrix)
-  means = np.mean(mat, axis=0)
-  stds = np.std(mat, axis=0)
+  # mat = matrix.matrix
+  # means = np.mean(mat, axis=0)
+  # stds = np.std(mat, axis=0)
   # mat = (mat - means) / stds
 
   #run Dbscan
   start = time.time()
-  db = dbscan(mat, eps=eps, algorithm='kd_tree', min_samples=samples, n_jobs=-1)
-  print("eps= %.3f, min_samples=%d, %d clusters generated, %.2f%% noise"%(eps,samples,len(set(db[1])),100.0*list(db[1]).count(-1)/count))
+
+  mat = [i for i in matrix.matrix]
+  indexMap=list(range(len(mat)))
+  totalClusters = {0:[]}#total map of cluster indices to lists of article indices
+  totalDb = (None,[-1]*len(mat))#cluster representation returned by DBScan, modified iteratively to add more clusters
+
+  reps = 0
+  eps = startEps
+  while list(totalDb[1]).count(-1)/float(count) > targetNoise:
+    reps += 1
+    db = dbscan(mat, eps=eps, algorithm='kd_tree', min_samples=samples, n_jobs=-1)
+    print("DBScan: eps= %.3f, min_samples=%d, %d clusters generated, %.2f%% noise, %d articles"%(eps,samples,len(set(db[1])),100.0*list(db[1]).count(-1)/count,len(mat)))
+
+    removeClusters(mat,db,totalClusters,indexMap,totalDb)
+    eps *= 1.5
+
+  print("%d DBscans ran, %d clusters total, %.2f%% noise left"%(reps,len(set(totalDb[1])),100.0*list(totalDb[1]).count(-1)/count))
+
+
   print ("DBScan time: %.2fs"%(time.time()-start))
+  ### TODO: store DBscan results with pickle?
+
 
   start = time.time()
-  clusterCategoryRates,totalCategoryRate = getCategoryAppearanceRates(matrix,db)
-  findHighCategoryRates(clusterCategoryRates,totalCategoryRate,db)
+
+  clusterCategoryRates,totalCategoryRate = getCategoryAppearanceRates(matrix,totalDb)
+  findHighCategoryRates(clusterCategoryRates,totalCategoryRate,totalDb)
+
   print ("Category analysing time: %.2fs"%(time.time()-start))
 
 
 
+
+def removeClusters(currentMatrix,currentDb,totalClusters,indexMap,totalDb):
+  maxCluster = max(totalDb[1])+1
+
+  #TODO: maybe reappoint small clusters to noise cluster?
+  for cluster in set(currentDb[1]):
+    if cluster >= 0:
+      totalClusters[cluster+maxCluster] = [indexMap[index] for index, cluster_ in enumerate(currentDb[1]) if cluster_ == cluster]
+      for article in totalClusters[cluster+maxCluster]:
+        totalDb[1][article] = cluster+maxCluster
+
+  for index, cluster in reversed(list(enumerate(currentDb[1]))):
+    if cluster >= 0:
+      indexMap.pop(index)
+      currentMatrix.pop(index)
+
+
 if __name__ == "__main__":
-  #usage: dbscan.py (articleCount) (numClusters) (dbscanEps) (dbscanMinSamples)
+  #usage: dbscan.py (articleCount) (numClusters) (dbscanStartingEps) (dbscanMinSamples) (targetNoiseRatio)
+  if len(sys.argv) > 5:
+    noise = float(sys.argv[5])
   if len(sys.argv) > 4:
     samples = int(sys.argv[4])
   if len(sys.argv) > 3:
@@ -108,12 +162,15 @@ if __name__ == "__main__":
   if len(sys.argv) > 1:
     count = int(sys.argv[1])
   else:
+    print("usage: dbscan.py (articleCount) (numClusters) (dbscanStartingEps) (dbscanMinSamples) (targetNoiseRatio)")
+    print("running with default values")
+    noise = 0.9
     count = 100
     nClusters = 100
     eps = 100
     samples = 3
 
-  categoryAnalysis(count=count,nClusters=nClusters,eps=eps,samples=samples)
+  categoryAnalysis(count=count,nClusters=nClusters,startEps=eps,targetNoise=noise,samples=samples)
 
 
   ### crudely figure out best eps for to produce the most clusters 
