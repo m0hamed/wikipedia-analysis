@@ -9,7 +9,7 @@ import pickle
 #call parseXML to load a feature hashed matrix, store it with pickle for faster testing
 def loadMatrixPickle(count=100, nClusters=100):
 
-  xmlPath = "../enwiki-20161101-pages-articles-multistream.xml"
+  xmlPath = "enwiki-20161101-pages-articles-multistream.xml"
   picklepath = "fhmatrix-"+str(count)+"-"+str(nClusters)+".pickle"
 
   if os.path.exists(picklepath):
@@ -59,7 +59,7 @@ def findHighCategoryRates(clusterCategoryRates,totalCategoryRate,db):
   for clusterNdx in clusterCategoryRates:# iterate over clusters
     #print stats
     print("\n\n\nCluster %d (%d) : %d categories"%(clusterNdx,clusterSizes[clusterNdx],len(clusterCategoryRates[clusterNdx])))
-    
+
     if clusterNdx > 0:#ignore default noise cluster
       results = []
       for category in clusterCategoryRates[clusterNdx]: #iterate over five most common categories in cluster
@@ -77,7 +77,7 @@ def findHighCategoryRates(clusterCategoryRates,totalCategoryRate,db):
 def categoryAnalysis(count=100, nClusters=100, eps=100, samples=3):
   matrix = loadMatrixPickle(count,nClusters)
 
-  ### standardise the matrix for distances to make sense 
+  ### standardise the matrix for distances to make sense
   ### TODO: is this necessary or helpful? dbscan runs nicely on list of lists from featurehashedmatrix
   mat = np.matrix(matrix.matrix)
   means = np.mean(mat, axis=0)
@@ -86,7 +86,7 @@ def categoryAnalysis(count=100, nClusters=100, eps=100, samples=3):
 
   #run Dbscan
   start = time.time()
-  db = dbscan(mat, eps=eps, algorithm='kd_tree', min_samples=samples, n_jobs=-1)
+  db = dbscan(mat, eps=eps, algorithm='kd_tree', min_samples=samples, n_jobs=4)
   print("eps= %.3f, min_samples=%d, %d clusters generated, %.2f%% noise"%(eps,samples,len(set(db[1])),100.0*list(db[1]).count(-1)/count))
   print ("DBScan time: %.2fs"%(time.time()-start))
 
@@ -116,7 +116,7 @@ if __name__ == "__main__":
   categoryAnalysis(count=count,nClusters=nClusters,eps=eps,samples=samples)
 
 
-  ### crudely figure out best eps for to produce the most clusters 
+  ### crudely figure out best eps for to produce the most clusters
   ### for 10k articles, with standardization, 0.09*mean seems good
   ### for 10k articles, no standardization, 100 maybe?
   # for i in range(15,25):

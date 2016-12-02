@@ -87,3 +87,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# ignore the data file
+enwiki-20161101-pages-articles-multistream.xml
