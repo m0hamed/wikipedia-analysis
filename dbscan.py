@@ -11,7 +11,7 @@ import pickle
 #call parseXML to load a feature hashed matrix, store it with pickle for faster testing
 def loadMatrixPickle(count=100, buckets=100):
 
-  xmlPath = "../enwiki-20161101-pages-articles-multistream.xml"
+  xmlPath = "enwiki-20161101-pages-articles-multistream.xml"
   pickleMatrixPath = "pickle/fhmatrix-"+str(count)+"-"+str(buckets)+".pickle"
   pickleCounterPath = "pickle/counters-"+str(count)+".pickle"
 
@@ -62,7 +62,7 @@ def findHighCategoryRates(clusterCategoryCounter,totalCategoryCounter,db,nArticl
       prevalentCategories = sorted(clusterCategoryCounter[cluster].items(), key=lambda x: x[1], reverse=True)
       for categoryIndex in prevalentCategories[:5]: #iterate over five most common categories in cluster
         general.append((clusterCategoryCounter[cluster][categoryIndex[0]]/clusterSizes[cluster],totalCategoryCounter[categoryIndex[0]]/nArticles,categoryIndex[0]))
-      
+
       #print 5 highest ratios
       print("Most prevalent categories:")
       for result in general:
@@ -96,6 +96,7 @@ def fastCluster(clusteredCount, db, matrix):
 
 def categoryAnalysis(count=1000, dbScanCount=100, buckets=100, startEps=100, samples=3):
   matrix, counter = loadMatrixPickle(count,buckets)
+  sys.exit()
 
   #run Dbscan
   start = time.time()
@@ -192,7 +193,7 @@ def findDBParameters(count=100, buckets=100):
 
   print(resultsTopStd[0])
   print(resultsTopEps[0])
-    
+
 if __name__ == "__main__":
 
   #usage: dbscan.py (articleCount) (numClusters) (dbscanStartingEps) (dbscanMinSamples) (targetNoiseRatio)

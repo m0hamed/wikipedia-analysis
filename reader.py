@@ -42,7 +42,7 @@ def callback(text, index):
     print(".", end="")
     sys.stdout.flush()
   text = html.unescape(text)
-  extractCategories(text)
+  extractCategories(text, store=True)
   extractTags(text)
 
 def extractTags(text):
@@ -52,12 +52,13 @@ def extractTags(text):
       insertPositive(tag, context)
       print("%s!" % tag)
 
-def extractCategories(text):
+def extractCategories(text, store=False):
   categories = re.findall(r"\[\[Category:([^\]]+)\]\]", text)
-  categoryCounter.update(categories)
-  for c in categories:
-    if c in CATEGORIES:
-      insertPositive(c, text)
+  if store:
+    categoryCounter.update(categories)
+    for c in categories:
+      if c in CATEGORIES:
+        insertPositive(c, text)
   return categories
 
 def cleanStraglers(text):
