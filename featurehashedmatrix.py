@@ -1,18 +1,18 @@
 import re
-import reader
+from collections import Counter
 
 class FeatureHashedMatrix:
 
   def __init__(self,buckets):
     self.buckets = buckets
     self.matrix = []
-    self.categories = [] #TODO: huge memory hog
 
   def featurehash(self,features):
     ret = [0]*self.buckets
-    for feature in features:
+    counter = Counter(features)
+    for feature, count in counter.items():
       h = hash(feature) % self.buckets
-      ret[h] += 1
+      ret[h] += count
     return ret
 
   def addrow(self,text):
@@ -21,7 +21,6 @@ class FeatureHashedMatrix:
     # words = re.split('[\W]',text)#split words on not alphanumeric
     row = self.featurehash(words)
     self.matrix.append(row)
-    self.categories.append(reader.extractCategories(text))
 
   def clean(self,text):
     return re.sub(r"\{\{.*?\}\}", '', text)

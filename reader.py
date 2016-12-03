@@ -2,6 +2,9 @@ import xml.etree.ElementTree as etree
 import html, re, sys
 import pickle
 from collections import Counter
+from sklearn.cluster import KMeans
+from sklearn.model_selection import train_test_split
+from featurehashedmatrix import FeatureHashedMatrix
 
 CONTEXT=5000
 
@@ -10,6 +13,10 @@ CATEGORIES=set(['Living people', 'American male film actors', 'American films', 
 POSITIVES = {}
 PROCESSED = 0
 categoryCounter = Counter()
+CATEGORY_LABELS = []
+CATEGORY_LABEL_MAP = {}
+CATEGORY_MATRIX = []
+kmeans = None
 
 def parseXML(filename, callbacks, count=5):
   global PROCESSED
@@ -51,6 +58,7 @@ def extractCategories(text):
   for c in categories:
     if c in CATEGORIES:
       insertPositive(c, text)
+  return categories
 
 def cleanStraglers(text):
   start = end = None
@@ -75,35 +83,66 @@ def findCleanupTag(text, tag):
     context = text[cstart:start]+" "+text[end:cend]
     return cleanStraglers(context)
 
-def insertPositive(tag, context):
-  a = POSITIVES.get(tag)
+def insertPositive(key, entry, dataDict=POSITIVES, default=None, addFunc='append'):
+  if default is None:
+    default = []
+  a = dataDict.get(key)
   if a is None:
-    a = []
-    POSITIVES[tag] = a
-  a.append(context)
+    a = default
+    dataDict[key] = a
+  a.__getattribute__(addFunc)(entry)
+
+def displayStats():
+  print("========= %i Articles processed: =========" % PROCESSED)
+  for tag in TAGS:
+    print("%s has %i positives" % (tag, len(POSITIVES.get(tag, []))))
+  print()
+  print("========= Most Common categories: =========")
+  for c, count in categoryCounter.most_common(10):
+    print(c, "(%i)"%count)
+
+def createCategoryMatrix(buckets=100):
+  global CATEGORY_LABELS, CATEGORY_MATRIX, CATEGORY_LABEL_MAP
+  fh = FeatureHashedMatrix(buckets)
+  for label, category in enumerate(CATEGORIES):
+    CATEGORY_LABEL_MAP[label] = category
+    articles = POSITIVES.get(category)
+    for article in articles:
+      fh.addrow(article)
+      CATEGORY_LABELS.append(label)
+  CATEGORY_MATRIX = fh.matrix
+
+def runKmeans():
+  global kmeans
+  kmeans = KMeans(n_clusters=len(CATEGORIES), n_jobs=-1).fit(CATEGORY_MATRIX)
+
+def evaluateKmeans():
+  clusters = {}
+  print(len(kmeans.labels_), len(CATEGORY_LABELS))
+  for klabel, clabel in zip(kmeans.predict(CATEGORY_MATRIX), CATEGORY_LABELS):
+    insertPositive(klabel, [clabel],
+        dataDict=clusters, default=Counter(), addFunc='update')
+  for klabel, counter in clusters.items():
+    print("Cluster (%i)" % klabel)
+    for l, count in counter.most_common():
+      category = CATEGORY_LABEL_MAP[l]
+      count_category = len(POSITIVES.get(category))
+      print("label (%s)" %category, "(%f)"%(count/count_category))
 
 PICKLE_FILE="data.pickle"
 
 def store():
   with open(PICKLE_FILE, "wb") as f:
-    pickle.dump((PROCESSED, POSITIVES, categoryCounter), f, pickle.HIGHEST_PROTOCOL)
+    pickle.dump(
+        (PROCESSED, POSITIVES, categoryCounter, CATEGORY_LABELS, CATEGORY_MATRIX, kmeans, CATEGORY_LABEL_MAP), f, pickle.HIGHEST_PROTOCOL)
 
 def load():
-  global PROCESSED, POSITIVES, categoryCounter
+  global PROCESSED, POSITIVES, categoryCounter, CATEGORY_LABELS, CATEGORY_MATRIX, kmeans, CATEGORY_LABEL_MAP
   try:
     with open(PICKLE_FILE, "rb") as f:
-      (PROCESSED, POSITIVES, categoryCounter) = pickle.load(f)
-  except:
-    pass
-
-def displayStats():
-  print("%i Articles processed:" % PROCESSED)
-  for tag in TAGS:
-    print("%s has %i positives" % (tag, len(POSITIVES.get(tag, []))))
-  print("Most Common categories:")
-  for c, count in categoryCounter.most_common(5000):
-    print(c, "(%i)"%count)
-
+      (PROCESSED, POSITIVES, categoryCounter, CATEGORY_LABELS, CATEGORY_MATRIX, kmeans, CATEGORY_LABEL_MAP) = pickle.load(f)
+  except IOError as e:
+    print(e)
 
 if __name__ == "__main__":
   if len(sys.argv) > 1:
@@ -111,6 +150,9 @@ if __name__ == "__main__":
   else:
     count = 5
   load()
-  displayStats()
   parseXML("enwiki-20161101-pages-articles-multistream.xml", [callback], count)
+  createCategoryMatrix()
+  runKmeans()
   store()
+  displayStats()
+  evaluateKmeans()
